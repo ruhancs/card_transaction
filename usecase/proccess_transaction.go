@@ -1,15 +1,18 @@
 package usecase
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/ruhancs/card_transaction/domain/entity"
 	"github.com/ruhancs/card_transaction/domain/infra/gateway"
 	"github.com/ruhancs/card_transaction/dto"
+	"github.com/ruhancs/card_transaction/infra/kafka"
 )
 
 type UseCaseTransaction struct {
 	TransactionRepository gateway.TransactionRepositoryInterface
+	KafkaProducer kafka.KafkaProducer
 }
 
 func NewTransactionUseCase(repository gateway.TransactionRepositoryInterface) UseCaseTransaction {
@@ -48,6 +51,21 @@ func (usecase *UseCaseTransaction) ProccessTransaction(transactionDTO dto.Transa
 	if err != nil {
 		return entity.Transaction{},err
 	}
+
+	transactionDTO.ID = t.ID
+	transactionDTO.CreatedAt = t.CreatedAt
+	//transformar transactionDTO em json
+	transactionJson,err := json.Marshal(transactionDTO)
+	if err != nil {
+		return entity.Transaction{},err
+	}
+	
+	//publicar a msg no topico
+	err = usecase.KafkaProducer.Publish(string(transactionJson), "payments")
+	if err != nil {
+		return entity.Transaction{},err
+	}
+
 
 	return *t,nil
 }
